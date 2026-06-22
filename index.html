@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#14241d" />
+<title>Field Logbook</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<style>
+  :root{
+    --ink:#14241d; --paper:#f4f6f3; --surface:#ffffff; --line:#dfe5e0;
+    --muted:#5b6b62; --green:#1f7a4d; --green-d:#16603b;
+    --blue:#2563eb; --amber:#b45309; --danger:#9a2b2b;
+    --r:14px; --tap:52px;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--paper);
+    -webkit-text-size-adjust:100%; line-height:1.45;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .app{max-width:680px;margin:0 auto;min-height:100%;display:flex;flex-direction:column}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:.1em 0 .2em}
+  h2{font-size:18px;font-weight:800;letter-spacing:-.01em;margin:0 0 12px}
+  .muted{color:var(--muted)}
+  .mono{font-family:var(--mono)}
+
+  /* Top bar */
+  .bar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:5}
+  .bar .grow{flex:1;min-width:0}
+  .bar .who{font-weight:800;font-size:15px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .role{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--green)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);white-space:nowrap}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
+  .dot.off{background:var(--amber)}
+  .pending{color:var(--amber);border-color:#eadfce;background:#fdf6ec}
+
+  /* Layout */
+  .pad{padding:18px 16px}
+  .scroll{flex:1;overflow:auto}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+  .stack>*+*{margin-top:14px}
+
+  label.fld{display:block;margin-bottom:14px}
+  label.fld .lbl{display:block;font-size:12px;font-weight:700;letter-spacing:.02em;margin-bottom:6px}
+  input,select,textarea{
+    width:100%;font:inherit;color:var(--ink);background:var(--surface);
+    border:1.5px solid var(--line);border-radius:10px;padding:13px 12px;min-height:var(--tap)
+  }
+  textarea{min-height:120px;resize:vertical;line-height:1.5}
+  input:focus,select,textarea:focus,select:focus{outline:3px solid #bfe3cf;border-color:var(--green);outline-offset:0}
+  select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235b6b62' stroke-width='3'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 14px center;padding-right:38px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:var(--tap);
+    border:1.5px solid var(--ink);border-radius:12px;background:var(--surface);color:var(--ink);
+    font-weight:800;font-size:16px;cursor:pointer;padding:0 16px}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--green);border-color:var(--green);color:#fff}
+  .btn.primary:active{background:var(--green-d)}
+  .btn.ghost{border-color:var(--line)}
+  .btn.sm{min-height:42px;font-size:14px;width:auto;padding:0 14px}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1}
+
+  /* Segmented (colorblind-safe: icon + label + distinct shape state, never color alone) */
+  .seg{display:flex;gap:10px}
+  .seg button{flex:1;min-height:var(--tap);border:2px solid var(--line);background:var(--surface);
+    border-radius:12px;font-weight:800;font-size:15px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--muted)}
+  .seg button .ic{width:22px;height:22px}
+  .seg button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);border-width:2.5px;box-shadow:inset 0 0 0 2px #fff, 0 0 0 2px var(--ink)}
+  .seg button[aria-pressed="true"].inperson{color:var(--blue);border-color:var(--blue);box-shadow:inset 0 0 0 2px #fff,0 0 0 2px var(--blue)}
+  .seg button[aria-pressed="true"].phone{color:var(--amber);border-color:var(--amber);box-shadow:inset 0 0 0 2px #fff,0 0 0 2px var(--amber)}
+  .check{position:absolute;top:8px;right:10px;font-weight:900}
+
+  /* Big menu buttons */
+  .menu{display:grid;gap:12px}
+  .menu button{display:flex;align-items:center;gap:14px;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r);padding:18px 16px;cursor:pointer;width:100%}
+  .menu button .ic{width:26px;height:26px;color:var(--green);flex:none}
+  .menu button b{display:block;font-size:17px;font-weight:800}
+  .menu button span{font-size:13px;color:var(--muted)}
+  .menu button .arr{margin-left:auto;color:var(--muted)}
+
+  /* Ledger / list */
+  .ledger{border-left:3px solid var(--line);padding-left:14px;margin-left:2px}
+  .entry{padding:12px 0;border-bottom:1px solid var(--line)}
+  .entry:last-child{border-bottom:0}
+  .entry .ts{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .entry .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tag{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:6px;border:1.5px solid currentColor;display:inline-flex;align-items:center;gap:5px}
+  .tag.inperson{color:var(--blue)} .tag.phone{color:var(--amber)}
+  .entry .notes{margin-top:6px;white-space:pre-wrap;font-size:14.5px}
+  .entry .qpending{color:var(--amber);font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+
+  .cust-item{display:flex;align-items:center;gap:12px;padding:14px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);cursor:pointer;margin-bottom:10px;text-align:left;width:100%}
+  .cust-item b{font-size:15.5px;font-weight:800}
+  .cust-item small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+  .cust-item .arr{margin-left:auto;color:var(--muted)}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;transition:.25s;z-index:30;max-width:90vw;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .err{color:var(--danger);font-weight:700;font-size:13px;margin-top:6px}
+  .empty{text-align:center;color:var(--muted);padding:40px 20px}
+  .empty .ic{width:38px;height:38px;color:var(--line);margin-bottom:8px}
+
+  /* Admin table */
+  .filters{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .filters .full{grid-column:1/-1}
+  .tablewrap{overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:13px;min-width:640px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{position:sticky;top:0;background:#f0f3f0;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap;cursor:pointer}
+  td.ts{font-family:var(--mono);white-space:nowrap;font-size:12px}
+  td.notes{min-width:220px;white-space:pre-wrap}
+  .count{font-weight:800}
+  .hide{display:none!important}
+  .center{display:flex;align-items:center;justify-content:center;min-height:60vh;text-align:center}
+  .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--green);border-radius:50%;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- BAR -->
+  <div class="bar hide" id="bar">
+    <button class="btn sm ghost" id="backBtn" style="width:auto" aria-label="Back">‹ Back</button>
+    <div class="grow">
+      <div class="who" id="whoName"></div>
+      <div class="role" id="whoRole"></div>
+    </div>
+    <span class="pill" id="netPill"><span class="dot" id="netDot"></span><span id="netTxt">Online</span></span>
+    <button class="btn sm ghost" id="logoutBtn" style="width:auto">Sign out</button>
+  </div>
+
+  <div class="scroll" id="scroll">
+
+    <!-- SETUP -->
+    <section id="screen-setup" class="pad">
+      <div class="eyebrow">Field Logbook · Setup</div>
+      <h1>Connect your logbook</h1>
+      <p class="muted">Paste the Web App URL from your Apps Script deployment and the shared access token. Or explore the full app in demo mode first.</p>
+      <div class="card stack">
+        <label class="fld"><span class="lbl">Web App URL</span>
+          <input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec" inputmode="url" autocomplete="off"></label>
+        <label class="fld"><span class="lbl">Access token</span>
+          <input id="cfgToken" placeholder="the SHARED_TOKEN from your script" autocomplete="off"></label>
+        <button class="btn primary" id="cfgSave">Save & continue</button>
+        <div class="err hide" id="cfgErr"></div>
+      </div>
+      <button class="btn ghost" id="cfgDemo">Try demo mode</button>
+      <p class="muted" style="font-size:12px;margin-top:12px">Demo mode runs entirely on this device with sample users — nothing is sent anywhere. Reps: <b>Demo Rep / 1234</b>. Admin: <b>Demo Admin / 0000</b>.</p>
+    </section>
+
+    <!-- LOGIN -->
+    <section id="screen-login" class="pad hide">
+      <div class="eyebrow" id="loginMode">Field Logbook</div>
+      <h1>Sign in</h1>
+      <div class="card stack">
+        <label class="fld"><span class="lbl">Your name</span>
+          <select id="loginName"><option value="">Loading…</option></select></label>
+        <label class="fld"><span class="lbl">PIN</span>
+          <input id="loginPin" type="password" inputmode="numeric" autocomplete="off" placeholder="••••"></label>
+        <button class="btn primary" id="loginBtn">Open logbook</button>
+        <div class="err hide" id="loginErr"></div>
+      </div>
+      <button class="btn ghost sm" id="toSetup" style="width:auto">Change connection</button>
+    </section>
+
+    <!-- REP HOME -->
+    <section id="screen-rephome" class="pad hide">
+      <div class="eyebrow">Logbook</div>
+      <h1 id="repGreeting">Your logbook</h1>
+      <div class="menu">
+        <button id="goNewLog">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <div><b>New log entry</b><span>Record a call or visit</span></div>
+          <span class="arr">›</span>
+        </button>
+        <button id="goCustomers">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
+          <div><b>My customers</b><span id="custCount">View accounts & follow up</span></div>
+          <span class="arr">›</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- NEW LOG -->
+    <section id="screen-newlog" class="pad hide">
+      <div class="eyebrow" id="logStamp">New entry</div>
+      <h1 id="logTitle">New log entry</h1>
+
+      <div class="card">
+        <h2>Customer</h2>
+        <div class="seg" style="margin-bottom:14px">
+          <button id="modeExisting" aria-pressed="true">Existing</button>
+          <button id="modeNew" aria-pressed="false">New customer</button>
+        </div>
+
+        <div id="existingWrap">
+          <label class="fld"><span class="lbl">Select account</span>
+            <select id="custSelect"><option value="">— choose —</option></select></label>
+          <div class="muted" id="custMeta" style="font-size:13px"></div>
+        </div>
+
+        <div id="newWrap" class="hide stack">
+          <label class="fld"><span class="lbl">Business name *</span><input id="nName" autocomplete="off"></label>
+          <label class="fld"><span class="lbl">Address</span><input id="nAddr" autocomplete="off"></label>
+          <div class="row">
+            <label class="fld" style="margin:0"><span class="lbl">Contact person</span><input id="nContact" autocomplete="off"></label>
+          </div>
+          <div class="row">
+            <label class="fld" style="margin:0"><span class="lbl">Phone</span><input id="nPhone" inputmode="tel" autocomplete="off"></label>
+            <label class="fld" style="margin:0"><span class="lbl">Email</span><input id="nEmail" inputmode="email" autocomplete="off"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Visit type</h2>
+        <div class="seg">
+          <button id="mIn" class="inperson" aria-pressed="false">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z"/></svg>
+            In person
+          </button>
+          <button id="mPhone" class="phone" aria-pressed="false">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+            Phone
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Call / visit notes</h2>
+        <textarea id="logNotes" placeholder="Full breakdown: what was discussed, products, pricing, objections, next steps…"></textarea>
+      </div>
+
+      <button class="btn primary" id="saveLog">Save entry</button>
+      <div class="err hide" id="logErr"></div>
+    </section>
+
+    <!-- CUSTOMERS LIST -->
+    <section id="screen-customers" class="pad hide">
+      <div class="eyebrow">Accounts</div>
+      <h1>My customers</h1>
+      <input id="custSearch" placeholder="Search by name or contact…" style="margin-bottom:14px" autocomplete="off">
+      <div id="custList"></div>
+    </section>
+
+    <!-- CUSTOMER DETAIL -->
+    <section id="screen-custdetail" class="pad hide">
+      <div class="eyebrow">Account</div>
+      <h1 id="cdName">—</h1>
+      <div class="card stack" id="cdInfo"></div>
+      <button class="btn primary" id="cdFollowUp">Log a follow-up</button>
+      <button class="btn ghost" id="cdEdit" style="margin-top:10px">Edit contact info</button>
+      <h2 style="margin-top:22px">History</h2>
+      <div class="ledger" id="cdHistory"></div>
+    </section>
+
+    <!-- EDIT CUSTOMER -->
+    <section id="screen-editcust" class="pad hide">
+      <div class="eyebrow">Account</div>
+      <h1>Edit contact info</h1>
+      <div class="card stack">
+        <label class="fld"><span class="lbl">Business name *</span><input id="eName" autocomplete="off"></label>
+        <label class="fld"><span class="lbl">Address</span><input id="eAddr" autocomplete="off"></label>
+        <label class="fld"><span class="lbl">Contact person</span><input id="eContact" autocomplete="off"></label>
+        <label class="fld"><span class="lbl">Phone</span><input id="ePhone" inputmode="tel" autocomplete="off"></label>
+        <label class="fld"><span class="lbl">Email</span><input id="eEmail" inputmode="email" autocomplete="off"></label>
+        <button class="btn primary" id="eSave">Save changes</button>
+      </div>
+    </section>
+
+    <!-- ADMIN REPORT -->
+    <section id="screen-admin" class="pad hide">
+      <div class="eyebrow">Admin</div>
+      <h1>Full activity report</h1>
+      <div class="card">
+        <div class="filters">
+          <label class="fld" style="margin:0"><span class="lbl">Rep</span>
+            <select id="fRep"><option value="">All reps</option></select></label>
+          <label class="fld" style="margin:0"><span class="lbl">Visit type</span>
+            <select id="fType"><option value="">All types</option><option value="In person">In person</option><option value="Phone">Phone</option></select></label>
+          <label class="fld" style="margin:0"><span class="lbl">From</span><input id="fFrom" type="date"></label>
+          <label class="fld" style="margin:0"><span class="lbl">To</span><input id="fTo" type="date"></label>
+          <label class="fld full" style="margin:0"><span class="lbl">Search</span><input id="fSearch" placeholder="customer, contact, notes…" autocomplete="off"></label>
+        </div>
+        <div class="row" style="margin-top:4px">
+          <button class="btn ghost sm" id="adminRefresh">Refresh</button>
+          <button class="btn primary sm" id="adminExport">Export CSV</button>
+        </div>
+        <div class="muted" style="margin-top:10px;font-size:13px"><span class="count" id="adminCount">0</span> entries</div>
+      </div>
+      <div class="tablewrap">
+        <table id="adminTable">
+          <thead><tr>
+            <th data-k="timestamp">Date / time</th>
+            <th data-k="rep">Rep</th>
+            <th data-k="customer">Customer</th>
+            <th data-k="address">Address</th>
+            <th data-k="contact">Contact</th>
+            <th data-k="phone">Phone</th>
+            <th data-k="email">Email</th>
+            <th data-k="method">Type</th>
+            <th data-k="notes">Notes</th>
+          </tr></thead>
+          <tbody id="adminBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="center hide" id="loading"><div><div class="spin" style="margin:0 auto 10px"></div><div class="muted">Working…</div></div></div>
+
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Field Logbook — single-file PWA
+   Architecture:
+   - Customers and Entries are separate records (entry -> customer).
+   - All writes go through an IndexedDB queue first (offline-safe),
+     then flush to the backend; each op carries a unique op_id so the
+     server can dedupe retries (idempotent). New customers created
+     offline get a temp client uuid that the server resolves on sync.
+   - Reads for reps are filtered server-side (never receive others' data).
+   ============================================================ */
+
+const $ = s => document.querySelector(s);
+const uuid = () => 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const nowISO = () => new Date().toISOString();
+
+/* ---------- tiny IndexedDB wrapper ---------- */
+const DB = (() => {
+  let dbp;
+  function open(){
+    if(dbp) return dbp;
+    dbp = new Promise((res,rej)=>{
+      const r = indexedDB.open('field-logbook', 1);
+      r.onupgradeneeded = e => {
+        const db = e.target.result;
+        db.createObjectStore('queue', {keyPath:'op_id'});
+        db.createObjectStore('customers', {keyPath:'localId'});
+        db.createObjectStore('kv', {keyPath:'k'});
+        db.createObjectStore('demo', {keyPath:'k'}); // demo "server"
+      };
+      r.onsuccess = e => res(e.target.result);
+      r.onerror = e => rej(e.target.error);
+    });
+    return dbp;
+  }
+  const tx = (store, mode) => open().then(db => db.transaction(store, mode).objectStore(store));
+  return {
+    async get(store,key){ const s=await tx(store,'readonly'); return new Promise((res,rej)=>{const r=s.get(key);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});},
+    async all(store){ const s=await tx(store,'readonly'); return new Promise((res,rej)=>{const r=s.getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)});},
+    async put(store,val){ const s=await tx(store,'readwrite'); return new Promise((res,rej)=>{const r=s.put(val);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)});},
+    async del(store,key){ const s=await tx(store,'readwrite'); return new Promise((res,rej)=>{const r=s.delete(key);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)});},
+    async clear(store){ const s=await tx(store,'readwrite'); return new Promise((res,rej)=>{const r=s.clear();r.onsuccess=()=>res();r.onerror=()=>rej(r.error)});}
+  };
+})();
+
+/* ---------- config / session ---------- */
+let CFG = { url:'', token:'', demo:false };
+let SESSION = null; // {name, pin, role}
+
+async function loadCfg(){ const v = await DB.get('kv','cfg'); if(v) CFG = v.v; }
+async function saveCfg(){ await DB.put('kv',{k:'cfg',v:CFG}); }
+async function loadSession(){ const v = await DB.get('kv','session'); if(v) SESSION = v.v; }
+async function saveSession(){ await DB.put('kv',{k:'session',v:SESSION}); }
+async function clearSession(){ SESSION=null; await DB.del('kv','session'); }
+
+/* ============================================================
+   API layer — real backend OR demo (mirrors the Apps Script).
+   Every call returns a plain object; throws Error(message) on failure.
+   ============================================================ */
+async function api(action, data={}){
+  if(CFG.demo) return demoApi(action, data);
+  const res = await fetch(CFG.url, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'}, // text/plain => no CORS preflight
+    body: JSON.stringify({action, token:CFG.token, ...data})
+  });
+  let j;
+  try { j = await res.json(); } catch(e){ throw new Error('Bad response from server'); }
+  if(!j.ok) throw new Error(j.error || 'Request failed');
+  return j;
+}
+
+/* ---------- DEMO backend (same logic as Apps Script reference) ---------- */
+async function demoSeed(){
+  if(await DB.get('demo','users')) return;
+  await DB.put('demo',{k:'users',v:[
+    {name:'Demo Rep', pin:'1234', role:'rep'},
+    {name:'Demo Admin', pin:'0000', role:'admin'}
+  ]});
+  await DB.put('demo',{k:'customers',v:[
+    {customer_id:'C1001', rep:'Demo Rep', name:'Harvest Table Bistro', address:'120 Main St, Columbia SC', contact_person:'Renee Park', phone:'803-555-0142', email:'renee@harvesttable.com', created_at:nowISO(), updated_at:nowISO()}
+  ]});
+  await DB.put('demo',{k:'entries',v:[
+    {entry_id:'E5001', op_id:'seed1', timestamp:new Date(Date.now()-86400000).toISOString(), rep:'Demo Rep', customer_id:'C1001', customer_name:'Harvest Table Bistro', method:'In person', notes:'Intro visit. Interested in weekly leafy greens + tomatoes. Send Monday price sheet.'}
+  ]});
+}
+async function demoApi(action, d){
+  await demoSeed();
+  const users = (await DB.get('demo','users')).v;
+  const auth = () => { const u=users.find(x=>x.name===d.name && String(x.pin)===String(d.pin)); if(!u) throw new Error('Wrong name or PIN'); return u; };
+  if(action==='getUsers') return {ok:true, users: users.map(u=>({name:u.name}))};
+  if(action==='login'){ const u=auth(); return {ok:true, role:u.role, name:u.name}; }
+  if(action==='getCustomers'){ const u=auth(); const cs=(await DB.get('demo','customers')).v;
+    return {ok:true, customers: u.role==='admin'?cs:cs.filter(c=>c.rep===u.name)}; }
+  if(action==='getCustomerEntries'){ const u=auth(); const es=(await DB.get('demo','entries')).v;
+    return {ok:true, entries: es.filter(e=>e.customer_id===d.customer_id && (u.role==='admin'||e.rep===u.name))
+      .map(e=>({timestamp:e.timestamp,method:e.method,notes:e.notes}))}; }
+  if(action==='getReport'){ const u=auth(); if(u.role!=='admin') throw new Error('Admin only');
+    const cs=(await DB.get('demo','customers')).v, es=(await DB.get('demo','entries')).v;
+    const map=Object.fromEntries(cs.map(c=>[c.customer_id,c]));
+    return {ok:true, users:users.map(x=>x.name),
+      rows: es.map(e=>{const c=map[e.customer_id]||{}; return {timestamp:e.timestamp,rep:e.rep,customer:e.customer_name||c.name||'',address:c.address||'',contact:c.contact_person||'',phone:c.phone||'',email:c.email||'',method:e.method,notes:e.notes};})}; }
+  if(action==='submit'){ const u=auth();
+    const cs=(await DB.get('demo','customers')).v, es=(await DB.get('demo','entries')).v;
+    const seenC=new Set(cs.map(c=>c.op_id)), seenE=new Set(es.map(e=>e.op_id));
+    const idmap={}; const results=[];
+    for(const op of d.ops){
+      if(op.type==='addCustomer'){
+        if(op.op_id && seenC.has(op.op_id)){ const ex=cs.find(c=>c.op_id===op.op_id); idmap[op.client_uuid]=ex.customer_id; results.push({op_id:op.op_id,status:'ok',customer_id:ex.customer_id}); continue; }
+        const id='C'+(1000+cs.length+1)+Math.floor(Math.random()*90);
+        const rec={op_id:op.op_id,customer_id:id,rep:u.name,name:op.name,address:op.address||'',contact_person:op.contact_person||'',phone:op.phone||'',email:op.email||'',created_at:nowISO(),updated_at:nowISO()};
+        cs.push(rec); seenC.add(op.op_id); idmap[op.client_uuid]=id; results.push({op_id:op.op_id,status:'ok',customer_id:id});
+      } else if(op.type==='updateCustomer'){
+        const c=cs.find(x=>x.customer_id===op.customer_id && x.rep===u.name);
+        if(c){ Object.assign(c,{name:op.name,address:op.address,contact_person:op.contact_person,phone:op.phone,email:op.email,updated_at:nowISO()});}
+        results.push({op_id:op.op_id,status:'ok'});
+      } else if(op.type==='addEntry'){
+        if(op.op_id && seenE.has(op.op_id)){ results.push({op_id:op.op_id,status:'ok'}); continue; }
+        const cid = op.customer_id || idmap[op.client_uuid];
+        const c = cs.find(x=>x.customer_id===cid)||{};
+        es.push({op_id:op.op_id,entry_id:'E'+(5000+es.length+1),timestamp:op.timestamp||nowISO(),rep:u.name,customer_id:cid,customer_name:c.name||op.customer_name||'',method:op.method,notes:op.notes||''});
+        seenE.add(op.op_id); results.push({op_id:op.op_id,status:'ok'});
+      }
+    }
+    await DB.put('demo',{k:'customers',v:cs}); await DB.put('demo',{k:'entries',v:es});
+    return {ok:true, results};
+  }
+  throw new Error('Unknown action '+action);
+}
+
+/* ============================================================
+   Sync engine
+   ============================================================ */
+let syncing=false;
+async function enqueue(op){
+  op.op_id = op.op_id || uuid();
+  op.seq = Date.now()+Math.random();
+  await DB.put('queue', op);
+  refreshNet();
+  flush();
+}
+async function flush(){
+  if(syncing) return;
+  if(CFG.demo){ /* demo writes synchronously below */ }
+  else if(!navigator.onLine) return;
+  const ops = (await DB.all('queue')).sort((a,b)=>a.seq-b.seq);
+  if(!ops.length) return;
+  if(!SESSION) return;
+  syncing=true;
+  try{
+    const payload = ops.map(({seq, ...o})=>o);
+    const r = await api('submit', {name:SESSION.name, pin:SESSION.pin, ops:payload});
+    // apply results: map new customer ids into local cache, then clear acked ops
+    for(const res of (r.results||[])){
+      if(res.status==='ok'){
+        if(res.customer_id){
+          // find local customer with this op_id (temp) and promote to real id
+          const locals = await DB.all('customers');
+          const match = locals.find(c=>c.op_id===res.op_id);
+          if(match){ match.customer_id=res.customer_id; match.pending=false; await DB.put('customers',match); }
+        }
+        await DB.del('queue', res.op_id);
+      }
+    }
+    refreshNet();
+  }catch(e){
+    // leave queue intact; will retry. (network/auth)
+  }finally{
+    syncing=false;
+  }
+}
+window.addEventListener('online', ()=>{refreshNet();flush();});
+window.addEventListener('offline', refreshNet);
+setInterval(()=>{ if(navigator.onLine) flush(); }, 20000);
+
+async function pendingCount(){ return (await DB.all('queue')).length; }
+async function refreshNet(){
+  const on = CFG.demo ? true : navigator.onLine;
+  const p = await pendingCount();
+  $('#netDot').className = 'dot'+(on?'':' off');
+  const pill=$('#netPill'); pill.classList.toggle('pending', p>0);
+  $('#netTxt').textContent = !on ? 'Offline' : (p>0 ? p+' to sync' : (CFG.demo?'Demo':'Online'));
+}
+
+/* ============================================================
+   Local customer cache (so dropdown works offline, incl. unsynced)
+   localId = stable key; customer_id = server id (may be temp uuid until synced)
+   ============================================================ */
+async function refreshCustomerCache(){
+  if(!SESSION) return;
+  try{
+    const r = await api('getCustomers', {name:SESSION.name, pin:SESSION.pin});
+    const existing = await DB.all('customers');
+    const pendings = existing.filter(c=>c.pending); // keep unsynced locals
+    // rebuild from server + keep pendings not yet represented
+    const serverIds = new Set(r.customers.map(c=>c.customer_id));
+    await DB.clear('customers');
+    for(const c of r.customers){ await DB.put('customers', {localId:c.customer_id, pending:false, ...c}); }
+    for(const p of pendings){ if(!serverIds.has(p.customer_id)) await DB.put('customers', p); }
+  }catch(e){ /* offline: keep cached */ }
+}
+async function getCachedCustomers(){
+  const c = await DB.all('customers');
+  return c.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+}
+
+/* ============================================================
+   Navigation
+   ============================================================ */
+const SCREENS=['setup','login','rephome','newlog','customers','custdetail','editcust','admin'];
+let navStack=[];
+function show(name, push=true){
+  SCREENS.forEach(s=>$('#screen-'+s).classList.toggle('hide', s!==name));
+  $('#scroll').scrollTop=0;
+  const chrome = !['setup','login'].includes(name);
+  $('#bar').classList.toggle('hide', !chrome);
+  $('#backBtn').classList.toggle('hide', navStack.length===0 || ['rephome','admin'].includes(name));
+  if(push) navStack.push(name);
+}
+function back(){
+  navStack.pop();
+  const prev = navStack[navStack.length-1] || (SESSION? (SESSION.role==='admin'?'admin':'rephome') : 'login');
+  show(prev, false);
+  if(prev==='customers') renderCustomerList();
+  if(prev==='rephome') renderRepHome();
+}
+$('#backBtn').onclick = back;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+function busy(on){ $('#loading').classList.toggle('hide', !on); }
+
+/* ============================================================
+   Setup screen
+   ============================================================ */
+$('#cfgSave').onclick = async ()=>{
+  const url=$('#cfgUrl').value.trim(), token=$('#cfgToken').value.trim();
+  if(!/^https:\/\/script\.google\.com\/macros\/s\//.test(url)){ showErr('#cfgErr','Enter the /exec Web App URL from your deployment.'); return; }
+  CFG={url, token, demo:false}; await saveCfg();
+  $('#cfgErr').classList.add('hide');
+  await startLogin();
+};
+$('#cfgDemo').onclick = async ()=>{ CFG={url:'',token:'',demo:true}; await saveCfg(); await startLogin(); };
+$('#toSetup').onclick = ()=>{ navStack=[]; show('setup',false); };
+function showErr(sel,msg){ const e=$(sel); e.textContent=msg; e.classList.remove('hide'); }
+
+/* ============================================================
+   Login
+   ============================================================ */
+async function startLogin(){
+  navStack=[]; show('login',false);
+  $('#loginMode').textContent = CFG.demo ? 'Field Logbook · Demo' : 'Field Logbook';
+  $('#loginErr').classList.add('hide'); $('#loginPin').value='';
+  const sel=$('#loginName'); sel.innerHTML='<option value="">Loading…</option>';
+  try{
+    const r = await api('getUsers');
+    sel.innerHTML = '<option value="">— select your name —</option>' + r.users.map(u=>`<option>${esc(u.name)}</option>`).join('');
+  }catch(e){ sel.innerHTML='<option value="">Could not load names</option>'; showErr('#loginErr', e.message); }
+}
+$('#loginBtn').onclick = async ()=>{
+  const name=$('#loginName').value, pin=$('#loginPin').value.trim();
+  if(!name||!pin){ showErr('#loginErr','Pick your name and enter your PIN.'); return; }
+  busy(true);
+  try{
+    const r = await api('login',{name, pin});
+    SESSION={name, pin, role:r.role}; await saveSession();
+    await afterLogin();
+  }catch(e){ showErr('#loginErr', e.message); }
+  finally{ busy(false); }
+};
+$('#logoutBtn').onclick = async ()=>{ await clearSession(); startLogin(); };
+
+async function afterLogin(){
+  $('#whoName').textContent=SESSION.name;
+  $('#whoRole').textContent=SESSION.role;
+  refreshNet();
+  if(SESSION.role==='admin'){ navStack=['admin']; show('admin',false); await loadReport(); }
+  else { navStack=['rephome']; show('rephome',false); await refreshCustomerCache(); await flush(); renderRepHome(); }
+}
+
+/* ============================================================
+   Rep home
+   ============================================================ */
+async function renderRepHome(){
+  $('#repGreeting').textContent = firstName(SESSION.name)+'’s logbook';
+  const cs = await getCachedCustomers();
+  $('#custCount').textContent = cs.length ? `${cs.length} account${cs.length>1?'s':''}` : 'No accounts yet';
+}
+$('#goNewLog').onclick = ()=> openNewLog(null);
+$('#goCustomers').onclick = ()=>{ show('customers'); renderCustomerList(); };
+
+/* ============================================================
+   New log entry
+   ============================================================ */
+let logState = { mode:'existing', method:'', selectedCustomer:null };
+async function openNewLog(preCustomer){
+  logState = { mode: preCustomer?'existing':'existing', method:'', selectedCustomer:preCustomer };
+  $('#logErr').classList.add('hide');
+  $('#logNotes').value='';
+  $('#nName').value=$('#nAddr').value=$('#nContact').value=$('#nPhone').value=$('#nEmail').value='';
+  setMode('existing');
+  setMethod('');
+  $('#logStamp').textContent = 'Will stamp · '+fmt(nowISO());
+  // populate select
+  const cs = await getCachedCustomers();
+  const sel=$('#custSelect');
+  sel.innerHTML = '<option value="">— choose —</option>' + cs.map(c=>`<option value="${esc(c.customer_id)}">${esc(c.name)}${c.pending?' (unsynced)':''}</option>`).join('');
+  if(preCustomer){ sel.value=preCustomer.customer_id; $('#logTitle').textContent='Follow-up'; onCustChange(); }
+  else { $('#logTitle').textContent='New log entry'; $('#custMeta').textContent=''; }
+  show('newlog');
+}
+function setMode(m){
+  logState.mode=m;
+  $('#modeExisting').setAttribute('aria-pressed', m==='existing');
+  $('#modeNew').setAttribute('aria-pressed', m==='new');
+  $('#existingWrap').classList.toggle('hide', m!=='existing');
+  $('#newWrap').classList.toggle('hide', m!=='new');
+}
+$('#modeExisting').onclick=()=>setMode('existing');
+$('#modeNew').onclick=()=>setMode('new');
+function setMethod(m){
+  logState.method=m;
+  $('#mIn').setAttribute('aria-pressed', m==='In person');
+  $('#mPhone').setAttribute('aria-pressed', m==='Phone');
+}
+$('#mIn').onclick=()=>setMethod('In person');
+$('#mPhone').onclick=()=>setMethod('Phone');
+$('#custSelect').onchange=onCustChange;
+async function onCustChange(){
+  const id=$('#custSelect').value;
+  const cs=await getCachedCustomers();
+  const c=cs.find(x=>x.customer_id===id);
+  logState.selectedCustomer=c||null;
+  $('#custMeta').textContent = c ? [c.contact_person,c.phone,c.address].filter(Boolean).join(' · ') : '';
+}
+$('#saveLog').onclick = async ()=>{
+  $('#logErr').classList.add('hide');
+  if(!logState.method){ showErr('#logErr','Choose In person or Phone.'); return; }
+  const notes=$('#logNotes').value.trim();
+  const ts=nowISO();
+  let customerOp=null, client_uuid=null, customer_id=null, customer_name=null;
+
+  if(logState.mode==='new'){
+    const name=$('#nName').value.trim();
+    if(!name){ showErr('#logErr','Enter the business name for the new customer.'); return; }
+    client_uuid=uuid(); customer_name=name;
+    customerOp={ type:'addCustomer', op_id:uuid(), client_uuid, name,
+      address:$('#nAddr').value.trim(), contact_person:$('#nContact').value.trim(),
+      phone:$('#nPhone').value.trim(), email:$('#nEmail').value.trim() };
+    // optimistic local cache so it appears immediately + offline
+    await DB.put('customers', {localId:client_uuid, op_id:customerOp.op_id, pending:true,
+      customer_id:client_uuid, rep:SESSION.name, name, address:customerOp.address,
+      contact_person:customerOp.contact_person, phone:customerOp.phone, email:customerOp.email, created_at:ts, updated_at:ts});
+  } else {
+    if(!logState.selectedCustomer){ showErr('#logErr','Select a customer or switch to New customer.'); return; }
+    customer_id = logState.selectedCustomer.customer_id;
+    customer_name = logState.selectedCustomer.name;
+    if(logState.selectedCustomer.pending){ client_uuid=customer_id; customer_id=null; } // not yet synced
+  }
+
+  const entryOp={ type:'addEntry', op_id:uuid(), timestamp:ts, method:logState.method, notes, customer_name };
+  if(customer_id) entryOp.customer_id=customer_id; else entryOp.client_uuid=client_uuid;
+
+  if(customerOp) await enqueue(customerOp);
+  await enqueue(entryOp);
+
+  toast('Entry saved'+(navigator.onLine||CFG.demo?'':' — will sync'));
+  if(navStack.includes('custdetail')){ back(); } else { back(); }
+  if(SESSION.role!=='admin'){ await refreshCustomerCache(); renderRepHome(); }
+};
+
+/* ============================================================
+   Customers list + detail
+   ============================================================ */
+async function renderCustomerList(){
+  const q=$('#custSearch').value.trim().toLowerCase();
+  const cs=await getCachedCustomers();
+  const list=$('#custList');
+  const f = cs.filter(c=>!q || (c.name||'').toLowerCase().includes(q) || (c.contact_person||'').toLowerCase().includes(q));
+  if(!f.length){ list.innerHTML = `<div class="empty"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><div>${cs.length?'No matches.':'No customers yet. Add one from a new log entry.'}</div></div>`; return; }
+  list.innerHTML = f.map(c=>`<button class="cust-item" data-id="${esc(c.customer_id)}">
+      <div><b>${esc(c.name)}</b><small>${esc([c.contact_person,c.phone].filter(Boolean).join(' · ')||c.address||'')}</small></div>
+      ${c.pending?'<span class="qpending" style="margin-left:auto">unsynced</span>':'<span class="arr">›</span>'}
+    </button>`).join('');
+  list.querySelectorAll('.cust-item').forEach(b=> b.onclick=()=>openCustomer(b.dataset.id));
+}
+$('#custSearch').oninput = renderCustomerList;
+
+let curCustomer=null;
+async function openCustomer(id){
+  const cs=await getCachedCustomers();
+  curCustomer = cs.find(c=>c.customer_id===id); if(!curCustomer) return;
+  $('#cdName').textContent=curCustomer.name;
+  $('#cdInfo').innerHTML = [
+    ['Contact', curCustomer.contact_person],['Phone', curCustomer.phone],
+    ['Email', curCustomer.email],['Address', curCustomer.address]
+  ].filter(r=>r[1]).map(r=>`<div><div class="eyebrow">${r[0]}</div><div>${esc(r[1])}</div></div>`).join('') || '<div class="muted">No contact details yet.</div>';
+  show('custdetail');
+  // history
+  const hist=$('#cdHistory'); hist.innerHTML='<div class="muted" style="padding:10px 0">Loading…</div>';
+  const entries = await fetchCustomerHistory(curCustomer);
+  hist.innerHTML = entries.length ? entries.map(renderEntryRow).join('')
+    : '<div class="muted" style="padding:10px 0">No entries logged yet.</div>';
+}
+async function fetchCustomerHistory(c){
+  // queued (unsynced) entries for this customer
+  const queued = (await DB.all('queue')).filter(o=>o.type==='addEntry' &&
+    ((o.customer_id && o.customer_id===c.customer_id) || (o.client_uuid && o.client_uuid===c.customer_id)))
+    .map(o=>({timestamp:o.timestamp,method:o.method,notes:o.notes,pending:true}));
+  let server=[];
+  if(!c.pending){
+    try{ const r=await api('getCustomerEntries',{name:SESSION.name,pin:SESSION.pin,customer_id:c.customer_id});
+      server=(r.entries||[]).map(e=>({timestamp:e.timestamp,method:e.method,notes:e.notes})); }catch(_){}
+  }
+  return [...queued, ...server].sort((a,b)=> (b.timestamp||'').localeCompare(a.timestamp||''));
+}
+function renderEntryRow(e){
+  const cls = e.method==='In person'?'inperson':'phone';
+  const icon = e.method==='In person'
+    ? `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z"/></svg>`
+    : `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>`;
+  return `<div class="entry">
+    <div class="head"><span class="ts">${fmt(e.timestamp)}</span>
+      <span class="tag ${cls}">${icon}${e.method||''}</span>
+      ${e.pending?'<span class="qpending">unsynced</span>':''}</div>
+    ${e.notes?`<div class="notes">${esc(e.notes)}</div>`:''}
+  </div>`;
+}
+$('#cdFollowUp').onclick = ()=> openNewLog(curCustomer);
+$('#cdEdit').onclick = ()=>{
+  $('#eName').value=curCustomer.name||''; $('#eAddr').value=curCustomer.address||'';
+  $('#eContact').value=curCustomer.contact_person||''; $('#ePhone').value=curCustomer.phone||'';
+  $('#eEmail').value=curCustomer.email||''; show('editcust');
+};
+$('#eSave').onclick = async ()=>{
+  const name=$('#eName').value.trim(); if(!name){ toast('Business name required'); return; }
+  const upd={ name, address:$('#eAddr').value.trim(), contact_person:$('#eContact').value.trim(),
+    phone:$('#ePhone').value.trim(), email:$('#eEmail').value.trim() };
+  // update local cache
+  const rec = await DB.get('customers', curCustomer.customer_id) || {localId:curCustomer.customer_id, ...curCustomer};
+  Object.assign(rec, upd, {updated_at:nowISO()}); await DB.put('customers', rec);
+  curCustomer=Object.assign({}, curCustomer, upd);
+  if(!curCustomer.pending){ // only sync edits for synced customers
+    await enqueue({type:'updateCustomer', op_id:uuid(), customer_id:curCustomer.customer_id, ...upd});
+  }
+  toast('Contact info updated'); back(); openCustomer(curCustomer.customer_id);
+};
+
+/* ============================================================
+   Admin report
+   ============================================================ */
+let reportRows=[], sortKey='timestamp', sortDir=-1;
+async function loadReport(){
+  busy(true);
+  try{
+    const r=await api('getReport',{name:SESSION.name,pin:SESSION.pin});
+    reportRows=r.rows||[];
+    const sel=$('#fRep'); sel.innerHTML='<option value="">All reps</option>'+(r.users||[]).map(u=>`<option>${esc(u)}</option>`).join('');
+    renderReport();
+  }catch(e){ toast(e.message); }
+  finally{ busy(false); }
+}
+$('#adminRefresh').onclick=loadReport;
+['fRep','fType','fFrom','fTo','fSearch'].forEach(id=> $('#'+id).oninput=renderReport);
+$('#adminTable').querySelectorAll('th').forEach(th=> th.onclick=()=>{
+  const k=th.dataset.k; if(sortKey===k) sortDir*=-1; else {sortKey=k; sortDir=1;} renderReport();
+});
+function filteredRows(){
+  const rep=$('#fRep').value, type=$('#fType').value, from=$('#fFrom').value, to=$('#fTo').value,
+        q=$('#fSearch').value.trim().toLowerCase();
+  return reportRows.filter(r=>{
+    if(rep && r.rep!==rep) return false;
+    if(type && r.method!==type) return false;
+    const d=(r.timestamp||'').slice(0,10);
+    if(from && d<from) return false;
+    if(to && d>to) return false;
+    if(q){ const blob=[r.customer,r.contact,r.notes,r.address,r.email].join(' ').toLowerCase(); if(!blob.includes(q)) return false; }
+    return true;
+  }).sort((a,b)=>{ const x=(a[sortKey]||''), y=(b[sortKey]||''); return (x>y?1:x<y?-1:0)*sortDir; });
+}
+function renderReport(){
+  const rows=filteredRows();
+  $('#adminCount').textContent=rows.length;
+  $('#adminBody').innerHTML = rows.length ? rows.map(r=>`<tr>
+    <td class="ts">${fmt(r.timestamp)}</td><td>${esc(r.rep)}</td><td>${esc(r.customer)}</td>
+    <td>${esc(r.address)}</td><td>${esc(r.contact)}</td><td class="mono">${esc(r.phone)}</td>
+    <td>${esc(r.email)}</td><td>${esc(r.method)}</td><td class="notes">${esc(r.notes)}</td></tr>`).join('')
+    : `<tr><td colspan="9" class="empty">No entries match these filters.</td></tr>`;
+}
+$('#adminExport').onclick=()=>{
+  const rows=filteredRows();
+  const cols=['timestamp','rep','customer','address','contact','phone','email','method','notes'];
+  const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>csvCell(r[c])).join(','))).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='sales-activity-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+};
+function csvCell(v){ v=(v==null?'':String(v)); return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+
+/* ---------- helpers ---------- */
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmt(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d)) return iso;
+  return d.toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); }
+function firstName(n){ return (n||'').split(' ')[0]; }
+
+/* ============================================================
+   Boot
+   ============================================================ */
+(async function boot(){
+  await loadCfg(); await loadSession();
+  if(!CFG.url && !CFG.demo){ show('setup',false); return; }
+  if(SESSION){ try{ await afterLogin(); }catch(e){ await startLogin(); } }
+  else { await startLogin(); }
+  refreshNet();
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+})();
+</script>
+</body>
+</html>
