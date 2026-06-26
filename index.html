@@ -205,6 +205,7 @@
           <label class="fld"><span class="lbl">Select account</span>
             <select id="custSelect"><option value="">— choose —</option></select></label>
           <div class="muted" id="custMeta" style="font-size:13px"></div>
+          <div id="logHistory"></div>
         </div>
 
         <div id="newWrap" class="hide stack">
@@ -455,39 +456,52 @@ async function demoApi(action, d){
    Sync engine
    ============================================================ */
 let syncing=false;
-async function enqueue(op){
+async function enqueue(op, doFlush=true){
   op.op_id = op.op_id || uuid();
   op.seq = Date.now()+Math.random();
   await DB.put('queue', op);
   refreshNet();
-  flush();
+  if(doFlush) flush();
 }
 async function flush(){
   if(syncing) return;
-  if(CFG.demo){ /* demo writes synchronously below */ }
-  else if(!navigator.onLine) return;
-  const ops = (await DB.all('queue')).sort((a,b)=>a.seq-b.seq);
-  if(!ops.length) return;
+  if(!CFG.demo && !navigator.onLine) return;
   if(!SESSION) return;
   syncing=true;
   try{
-    const payload = ops.map(({seq, ...o})=>o);
-    const r = await api('submit', {name:SESSION.name, pin:SESSION.pin, ops:payload});
-    // apply results: map new customer ids into local cache, then clear acked ops
-    for(const res of (r.results||[])){
-      if(res.status==='ok'){
+    // Loop so that ops queued mid-flight, and entries waiting on a not-yet-created
+    // customer id, are still sent (and linked) without being stranded.
+    for(let guard=0; guard<10; guard++){
+      const ops = (await DB.all('queue')).sort((a,b)=>a.seq-b.seq);
+      if(!ops.length) break;
+      const payload = ops.map(({seq, ...o})=>o);
+      const r = await api('submit', {name:SESSION.name, pin:SESSION.pin, ops:payload});
+      const acked = (r.results||[]);
+      const uuidMap = {}; // client_uuid -> real customer_id, resolved this round
+      for(const res of acked){
+        if(res.status!=='ok') continue;
         if(res.customer_id){
-          // find local customer with this op_id (temp) and promote to real id
           const locals = await DB.all('customers');
           const match = locals.find(c=>c.op_id===res.op_id);
-          if(match){ match.customer_id=res.customer_id; match.pending=false; await DB.put('customers',match); }
+          if(match){ uuidMap[match.localId]=res.customer_id; match.customer_id=res.customer_id; match.pending=false; await DB.put('customers',match); }
         }
         await DB.del('queue', res.op_id);
       }
+      // Re-link any still-queued entries whose customer just received a real id,
+      // so a note never gets written with a blank customer_id.
+      if(Object.keys(uuidMap).length){
+        const remaining = await DB.all('queue');
+        for(const o of remaining){
+          if(o.type==='addEntry' && o.client_uuid && uuidMap[o.client_uuid]){
+            o.customer_id = uuidMap[o.client_uuid]; delete o.client_uuid; await DB.put('queue', o);
+          }
+        }
+      }
+      if(!acked.length) break; // nothing accepted (e.g. error) — stop, retry later
     }
     refreshNet();
   }catch(e){
-    // leave queue intact; will retry. (network/auth)
+    // leave queue intact; will retry on the next trigger
   }finally{
     syncing=false;
   }
@@ -627,7 +641,7 @@ async function openNewLog(preCustomer){
   const sel=$('#custSelect');
   sel.innerHTML = '<option value="">— choose —</option>' + cs.map(c=>`<option value="${esc(c.customer_id)}">${esc(c.name)}${c.pending?' (unsynced)':''}</option>`).join('');
   if(preCustomer){ sel.value=preCustomer.customer_id; $('#logTitle').textContent='Follow-up'; onCustChange(); }
-  else { $('#logTitle').textContent='New log entry'; $('#custMeta').textContent=''; }
+  else { $('#logTitle').textContent='New log entry'; $('#custMeta').textContent=''; $('#logHistory').innerHTML=''; }
   show('newlog');
 }
 function setMode(m){
@@ -636,6 +650,8 @@ function setMode(m){
   $('#modeNew').setAttribute('aria-pressed', m==='new');
   $('#existingWrap').classList.toggle('hide', m!=='existing');
   $('#newWrap').classList.toggle('hide', m!=='new');
+  if(m==='new') $('#logHistory').innerHTML='';
+  else if(logState.selectedCustomer) renderLogHistory(logState.selectedCustomer);
 }
 $('#modeExisting').onclick=()=>setMode('existing');
 $('#modeNew').onclick=()=>setMode('new');
@@ -653,6 +669,19 @@ async function onCustChange(){
   const c=cs.find(x=>x.customer_id===id);
   logState.selectedCustomer=c||null;
   $('#custMeta').textContent = c ? [c.contact_person,c.phone,c.address].filter(Boolean).join(' · ') : '';
+  renderLogHistory(c);
+}
+async function renderLogHistory(c){
+  const box=$('#logHistory');
+  if(!c){ box.innerHTML=''; return; }
+  box.innerHTML='<div class="eyebrow" style="margin-top:14px">Recent activity</div><div class="muted" style="font-size:13px;padding:8px 0">Loading…</div>';
+  const entries=await fetchCustomerHistory(c);
+  if(!entries.length){ box.innerHTML='<div class="eyebrow" style="margin-top:14px">Recent activity</div><div class="muted" style="font-size:13px;padding:8px 0">No previous notes for this account.</div>'; return; }
+  const shown=entries.slice(0,4);
+  box.innerHTML='<div class="eyebrow" style="margin-top:14px">Recent activity</div><div class="ledger" style="margin-top:6px">'
+    + shown.map(renderEntryRow).join('')
+    + (entries.length>shown.length?`<div class="muted" style="font-size:12px;padding:8px 0">+${entries.length-shown.length} earlier — see full history under My customers.</div>`:'')
+    + '</div>';
 }
 $('#saveLog').onclick = async ()=>{
   $('#logErr').classList.add('hide');
@@ -682,8 +711,8 @@ $('#saveLog').onclick = async ()=>{
   const entryOp={ type:'addEntry', op_id:uuid(), timestamp:ts, method:logState.method, notes, customer_name };
   if(customer_id) entryOp.customer_id=customer_id; else entryOp.client_uuid=client_uuid;
 
-  if(customerOp) await enqueue(customerOp);
-  await enqueue(entryOp);
+  if(customerOp) await enqueue(customerOp, false); // hold the flush…
+  await enqueue(entryOp);                          // …so both sync in one batch
 
   toast('Entry saved'+(navigator.onLine||CFG.demo?'':' — will sync'));
   if(navStack.includes('custdetail')){ back(); } else { back(); }
