@@ -671,11 +671,13 @@ async function onCustChange(){
   $('#custMeta').textContent = c ? [c.contact_person,c.phone,c.address].filter(Boolean).join(' · ') : '';
   renderLogHistory(c);
 }
+let logHistCache={}; // customer_id -> entries, for this session (cuts repeat sheet scans)
 async function renderLogHistory(c){
   const box=$('#logHistory');
   if(!c){ box.innerHTML=''; return; }
   box.innerHTML='<div class="eyebrow" style="margin-top:14px">Recent activity</div><div class="muted" style="font-size:13px;padding:8px 0">Loading…</div>';
-  const entries=await fetchCustomerHistory(c);
+  let entries=logHistCache[c.customer_id];
+  if(!entries){ entries=await fetchCustomerHistory(c); logHistCache[c.customer_id]=entries; }
   if(!entries.length){ box.innerHTML='<div class="eyebrow" style="margin-top:14px">Recent activity</div><div class="muted" style="font-size:13px;padding:8px 0">No previous notes for this account.</div>'; return; }
   const shown=entries.slice(0,4);
   box.innerHTML='<div class="eyebrow" style="margin-top:14px">Recent activity</div><div class="ledger" style="margin-top:6px">'
@@ -713,6 +715,7 @@ $('#saveLog').onclick = async ()=>{
 
   if(customerOp) await enqueue(customerOp, false); // hold the flush…
   await enqueue(entryOp);                          // …so both sync in one batch
+  logHistCache={};                                 // freshen recent-activity panels
 
   toast('Entry saved'+(navigator.onLine||CFG.demo?'':' — will sync'));
   if(navStack.includes('custdetail')){ back(); } else { back(); }
