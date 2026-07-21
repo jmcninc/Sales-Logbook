@@ -93,6 +93,21 @@
   .entry .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .tag{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:6px;border:1.5px solid currentColor;display:inline-flex;align-items:center;gap:5px}
   .tag.inperson{color:var(--blue)} .tag.phone{color:var(--amber)}
+
+  /* Customer status */
+  .st{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:6px;border:1.5px solid currentColor;display:inline-flex;align-items:center;white-space:nowrap}
+  .st-target{color:var(--muted)} .st-interested{color:var(--blue)}
+  .st-active{color:var(--green)} .st-lapsed{color:var(--danger)}
+  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .statgrid button{min-height:56px;border:2px solid var(--line);background:var(--surface);border-radius:12px;cursor:pointer;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 6px}
+  .statgrid button b{font-weight:800;font-size:14px}
+  .statgrid button span{font-size:11px;color:var(--muted)}
+  .statgrid button[aria-pressed="true"]{border-width:2.5px;box-shadow:inset 0 0 0 2px #fff, 0 0 0 2px currentColor}
+  .statgrid button[aria-pressed="true"].st-target{color:var(--ink)}
+  .statgrid button[aria-pressed="true"].st-interested{color:var(--blue)}
+  .statgrid button[aria-pressed="true"].st-active{color:var(--green)}
+  .statgrid button[aria-pressed="true"].st-lapsed{color:var(--danger)}
+  .statgrid button[aria-pressed="true"] b{color:currentColor}
   .entry .notes{margin-top:6px;white-space:pre-wrap;font-size:14.5px}
   .entry .qpending{color:var(--amber);font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
 
@@ -219,6 +234,11 @@
             <label class="fld" style="margin:0"><span class="lbl">Email</span><input id="nEmail" inputmode="email" autocomplete="off"></label>
           </div>
         </div>
+
+        <div id="statusWrap" style="margin-top:14px">
+          <span class="lbl" style="display:block;font-size:12px;font-weight:700;margin-bottom:6px">Customer status</span>
+          <div class="statgrid" id="statusGrid"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -273,6 +293,8 @@
         <label class="fld"><span class="lbl">Contact person</span><input id="eContact" autocomplete="off"></label>
         <label class="fld"><span class="lbl">Phone</span><input id="ePhone" inputmode="tel" autocomplete="off"></label>
         <label class="fld"><span class="lbl">Email</span><input id="eEmail" inputmode="email" autocomplete="off"></label>
+        <label class="fld"><span class="lbl">Customer status</span>
+          <select id="eStatus"></select></label>
         <button class="btn primary" id="eSave">Save changes</button>
       </div>
     </section>
@@ -287,6 +309,8 @@
             <select id="fRep"><option value="">All reps</option></select></label>
           <label class="fld" style="margin:0"><span class="lbl">Visit type</span>
             <select id="fType"><option value="">All types</option><option value="In person">In person</option><option value="Phone">Phone</option></select></label>
+          <label class="fld" style="margin:0"><span class="lbl">Status</span>
+            <select id="fStatus"><option value="">All statuses</option></select></label>
           <label class="fld" style="margin:0"><span class="lbl">From</span><input id="fFrom" type="date"></label>
           <label class="fld" style="margin:0"><span class="lbl">To</span><input id="fTo" type="date"></label>
           <label class="fld full" style="margin:0"><span class="lbl">Search</span><input id="fSearch" placeholder="customer, contact, notes…" autocomplete="off"></label>
@@ -303,6 +327,7 @@
             <th data-k="timestamp">Date / time</th>
             <th data-k="rep">Rep</th>
             <th data-k="customer">Customer</th>
+            <th data-k="status">Status</th>
             <th data-k="address">Address</th>
             <th data-k="contact">Contact</th>
             <th data-k="phone">Phone</th>
@@ -337,6 +362,17 @@
 const $ = s => document.querySelector(s);
 const uuid = () => 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const nowISO = () => new Date().toISOString();
+
+/* ---------- customer status ---------- */
+const STATUSES = [
+  {id:'target',     label:'Target',     desc:'Not yet engaged'},
+  {id:'interested', label:'Interested', desc:'In conversations'},
+  {id:'active',     label:'Active',     desc:'Currently buying'},
+  {id:'lapsed',     label:'Lapsed',     desc:'Stopped buying'}
+];
+const normStatus = v => STATUSES.some(s=>s.id===v) ? v : 'target';
+const stLabel = v => STATUSES.find(s=>s.id===normStatus(v)).label;
+const stBadge = v => { v=normStatus(v); return `<span class="st st-${v}">${stLabel(v)}</span>`; };
 
 /* ---------- tiny IndexedDB wrapper ---------- */
 const DB = (() => {
@@ -402,7 +438,7 @@ async function demoSeed(){
     {name:'Demo Admin', pin:'0000', role:'admin'}
   ]});
   await DB.put('demo',{k:'customers',v:[
-    {customer_id:'C1001', rep:'Demo Rep', name:'Harvest Table Bistro', address:'120 Main St, Columbia SC', contact_person:'Renee Park', phone:'803-555-0142', email:'renee@harvesttable.com', created_at:nowISO(), updated_at:nowISO()}
+    {customer_id:'C1001', rep:'Demo Rep', name:'Harvest Table Bistro', address:'120 Main St, Columbia SC', contact_person:'Renee Park', phone:'803-555-0142', email:'renee@harvesttable.com', status:'active', created_at:nowISO(), updated_at:nowISO()}
   ]});
   await DB.put('demo',{k:'entries',v:[
     {entry_id:'E5001', op_id:'seed1', timestamp:new Date(Date.now()-86400000).toISOString(), rep:'Demo Rep', customer_id:'C1001', customer_name:'Harvest Table Bistro', method:'In person', notes:'Intro visit. Interested in weekly leafy greens + tomatoes. Send Monday price sheet.'}
@@ -423,7 +459,7 @@ async function demoApi(action, d){
     const cs=(await DB.get('demo','customers')).v, es=(await DB.get('demo','entries')).v;
     const map=Object.fromEntries(cs.map(c=>[c.customer_id,c]));
     return {ok:true, users:users.map(x=>x.name),
-      rows: es.map(e=>{const c=map[e.customer_id]||{}; return {timestamp:e.timestamp,rep:e.rep,customer:e.customer_name||c.name||'',address:c.address||'',contact:c.contact_person||'',phone:c.phone||'',email:c.email||'',method:e.method,notes:e.notes};})}; }
+      rows: es.map(e=>{const c=map[e.customer_id]||{}; return {timestamp:e.timestamp,rep:e.rep,customer:e.customer_name||c.name||'',address:c.address||'',contact:c.contact_person||'',phone:c.phone||'',email:c.email||'',status:normStatus(c.status),method:e.method,notes:e.notes};})}; }
   if(action==='submit'){ const u=auth();
     const cs=(await DB.get('demo','customers')).v, es=(await DB.get('demo','entries')).v;
     const seenC=new Set(cs.map(c=>c.op_id)), seenE=new Set(es.map(e=>e.op_id));
@@ -432,11 +468,16 @@ async function demoApi(action, d){
       if(op.type==='addCustomer'){
         if(op.op_id && seenC.has(op.op_id)){ const ex=cs.find(c=>c.op_id===op.op_id); idmap[op.client_uuid]=ex.customer_id; results.push({op_id:op.op_id,status:'ok',customer_id:ex.customer_id}); continue; }
         const id='C'+(1000+cs.length+1)+Math.floor(Math.random()*90);
-        const rec={op_id:op.op_id,customer_id:id,rep:u.name,name:op.name,address:op.address||'',contact_person:op.contact_person||'',phone:op.phone||'',email:op.email||'',created_at:nowISO(),updated_at:nowISO()};
+        const rec={op_id:op.op_id,customer_id:id,rep:u.name,name:op.name,address:op.address||'',contact_person:op.contact_person||'',phone:op.phone||'',email:op.email||'',status:normStatus(op.status),created_at:nowISO(),updated_at:nowISO()};
         cs.push(rec); seenC.add(op.op_id); idmap[op.client_uuid]=id; results.push({op_id:op.op_id,status:'ok',customer_id:id});
       } else if(op.type==='updateCustomer'){
         const c=cs.find(x=>x.customer_id===op.customer_id && x.rep===u.name);
-        if(c){ Object.assign(c,{name:op.name,address:op.address,contact_person:op.contact_person,phone:op.phone,email:op.email,updated_at:nowISO()});}
+        if(c){ Object.assign(c,{name:op.name,address:op.address,contact_person:op.contact_person,phone:op.phone,email:op.email,updated_at:nowISO()});
+               if(op.status!==undefined) c.status=normStatus(op.status); }
+        results.push({op_id:op.op_id,status:'ok'});
+      } else if(op.type==='setStatus'){
+        const c=cs.find(x=>(x.customer_id===op.customer_id || x.customer_id===idmap[op.client_uuid]) && x.rep===u.name);
+        if(c){ c.status=normStatus(op.status); c.updated_at=nowISO(); }
         results.push({op_id:op.op_id,status:'ok'});
       } else if(op.type==='addEntry'){
         if(op.op_id && seenE.has(op.op_id)){ results.push({op_id:op.op_id,status:'ok'}); continue; }
@@ -627,14 +668,26 @@ $('#goCustomers').onclick = ()=>{ show('customers'); renderCustomerList(); };
 /* ============================================================
    New log entry
    ============================================================ */
-let logState = { mode:'existing', method:'', selectedCustomer:null };
+let logState = { mode:'existing', method:'', selectedCustomer:null, status:'target' };
+
+/* status picker (built once) */
+$('#statusGrid').innerHTML = STATUSES.map(s=>
+  `<button type="button" class="st-${s.id}" data-st="${s.id}" aria-pressed="false"><b>${s.label}</b><span>${s.desc}</span></button>`).join('');
+$('#statusGrid').querySelectorAll('button').forEach(b=> b.onclick=()=>setStatusSel(b.dataset.st));
+function setStatusSel(id){
+  id = normStatus(id);
+  logState.status = id;
+  $('#statusGrid').querySelectorAll('button').forEach(b=> b.setAttribute('aria-pressed', b.dataset.st===id));
+}
+
 async function openNewLog(preCustomer){
-  logState = { mode: preCustomer?'existing':'existing', method:'', selectedCustomer:preCustomer };
+  logState = { mode:'existing', method:'', selectedCustomer:preCustomer, status:'target' };
   $('#logErr').classList.add('hide');
   $('#logNotes').value='';
   $('#nName').value=$('#nAddr').value=$('#nContact').value=$('#nPhone').value=$('#nEmail').value='';
   setMode('existing');
   setMethod('');
+  setStatusSel(preCustomer ? preCustomer.status : 'target');
   $('#logStamp').textContent = 'Will stamp · '+fmt(nowISO());
   // populate select
   const cs = await getCachedCustomers();
@@ -650,8 +703,9 @@ function setMode(m){
   $('#modeNew').setAttribute('aria-pressed', m==='new');
   $('#existingWrap').classList.toggle('hide', m!=='existing');
   $('#newWrap').classList.toggle('hide', m!=='new');
-  if(m==='new') $('#logHistory').innerHTML='';
-  else if(logState.selectedCustomer) renderLogHistory(logState.selectedCustomer);
+  if(m==='new'){ $('#logHistory').innerHTML=''; setStatusSel('target'); }
+  else { setStatusSel(logState.selectedCustomer ? logState.selectedCustomer.status : 'target');
+         if(logState.selectedCustomer) renderLogHistory(logState.selectedCustomer); }
 }
 $('#modeExisting').onclick=()=>setMode('existing');
 $('#modeNew').onclick=()=>setMode('new');
@@ -668,6 +722,7 @@ async function onCustChange(){
   const cs=await getCachedCustomers();
   const c=cs.find(x=>x.customer_id===id);
   logState.selectedCustomer=c||null;
+  setStatusSel(c ? c.status : 'target');
   $('#custMeta').textContent = c ? [c.contact_person,c.phone,c.address].filter(Boolean).join(' · ') : '';
   renderLogHistory(c);
 }
@@ -685,6 +740,21 @@ async function renderLogHistory(c){
     + (entries.length>shown.length?`<div class="muted" style="font-size:12px;padding:8px 0">+${entries.length-shown.length} earlier — see full history under My customers.</div>`:'')
     + '</div>';
 }
+/* Persist a status change for a customer: update the local cache, then either
+   patch the still-queued addCustomer op (unsynced customer — so the server gets
+   the latest value in one write) or enqueue a setStatus op (synced customer). */
+async function applyStatusChange(c, status){
+  const rec = await DB.get('customers', c.localId || c.customer_id);
+  if(rec){ rec.status = status; rec.updated_at = nowISO(); await DB.put('customers', rec); }
+  c.status = status;
+  if(c.pending){
+    const qop = rec && rec.op_id ? await DB.get('queue', rec.op_id) : null;
+    if(qop){ qop.status = status; await DB.put('queue', qop); }
+  } else {
+    await enqueue({type:'setStatus', op_id:uuid(), customer_id:c.customer_id, status}, false);
+  }
+}
+
 $('#saveLog').onclick = async ()=>{
   $('#logErr').classList.add('hide');
   if(!logState.method){ showErr('#logErr','Choose In person or Phone.'); return; }
@@ -698,16 +768,21 @@ $('#saveLog').onclick = async ()=>{
     client_uuid=uuid(); customer_name=name;
     customerOp={ type:'addCustomer', op_id:uuid(), client_uuid, name,
       address:$('#nAddr').value.trim(), contact_person:$('#nContact').value.trim(),
-      phone:$('#nPhone').value.trim(), email:$('#nEmail').value.trim() };
+      phone:$('#nPhone').value.trim(), email:$('#nEmail').value.trim(), status:logState.status };
     // optimistic local cache so it appears immediately + offline
     await DB.put('customers', {localId:client_uuid, op_id:customerOp.op_id, pending:true,
       customer_id:client_uuid, rep:SESSION.name, name, address:customerOp.address,
-      contact_person:customerOp.contact_person, phone:customerOp.phone, email:customerOp.email, created_at:ts, updated_at:ts});
+      contact_person:customerOp.contact_person, phone:customerOp.phone, email:customerOp.email,
+      status:logState.status, created_at:ts, updated_at:ts});
   } else {
     if(!logState.selectedCustomer){ showErr('#logErr','Select a customer or switch to New customer.'); return; }
     customer_id = logState.selectedCustomer.customer_id;
     customer_name = logState.selectedCustomer.name;
     if(logState.selectedCustomer.pending){ client_uuid=customer_id; customer_id=null; } // not yet synced
+    // Status changed while logging? Persist it.
+    if(logState.status !== normStatus(logState.selectedCustomer.status)){
+      await applyStatusChange(logState.selectedCustomer, logState.status);
+    }
   }
 
   const entryOp={ type:'addEntry', op_id:uuid(), timestamp:ts, method:logState.method, notes, customer_name };
@@ -733,7 +808,7 @@ async function renderCustomerList(){
   if(!f.length){ list.innerHTML = `<div class="empty"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><div>${cs.length?'No matches.':'No customers yet. Add one from a new log entry.'}</div></div>`; return; }
   list.innerHTML = f.map(c=>`<button class="cust-item" data-id="${esc(c.customer_id)}">
       <div><b>${esc(c.name)}</b><small>${esc([c.contact_person,c.phone].filter(Boolean).join(' · ')||c.address||'')}</small></div>
-      ${c.pending?'<span class="qpending" style="margin-left:auto">unsynced</span>':'<span class="arr">›</span>'}
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px">${stBadge(c.status)}${c.pending?'<span class="qpending">unsynced</span>':'<span class="arr">›</span>'}</span>
     </button>`).join('');
   list.querySelectorAll('.cust-item').forEach(b=> b.onclick=()=>openCustomer(b.dataset.id));
 }
@@ -744,10 +819,10 @@ async function openCustomer(id){
   const cs=await getCachedCustomers();
   curCustomer = cs.find(c=>c.customer_id===id); if(!curCustomer) return;
   $('#cdName').textContent=curCustomer.name;
-  $('#cdInfo').innerHTML = [
+  $('#cdInfo').innerHTML = `<div><div class="eyebrow">Status</div><div style="margin-top:4px">${stBadge(curCustomer.status)}</div></div>` + ([
     ['Contact', curCustomer.contact_person],['Phone', curCustomer.phone],
     ['Email', curCustomer.email],['Address', curCustomer.address]
-  ].filter(r=>r[1]).map(r=>`<div><div class="eyebrow">${r[0]}</div><div>${esc(r[1])}</div></div>`).join('') || '<div class="muted">No contact details yet.</div>';
+  ].filter(r=>r[1]).map(r=>`<div><div class="eyebrow">${r[0]}</div><div>${esc(r[1])}</div></div>`).join('') || '<div class="muted">No contact details yet.</div>');
   show('custdetail');
   // history
   const hist=$('#cdHistory'); hist.innerHTML='<div class="muted" style="padding:10px 0">Loading…</div>';
@@ -780,21 +855,26 @@ function renderEntryRow(e){
   </div>`;
 }
 $('#cdFollowUp').onclick = ()=> openNewLog(curCustomer);
+$('#eStatus').innerHTML = STATUSES.map(s=>`<option value="${s.id}">${s.label} — ${s.desc}</option>`).join('');
 $('#cdEdit').onclick = ()=>{
   $('#eName').value=curCustomer.name||''; $('#eAddr').value=curCustomer.address||'';
   $('#eContact').value=curCustomer.contact_person||''; $('#ePhone').value=curCustomer.phone||'';
-  $('#eEmail').value=curCustomer.email||''; show('editcust');
+  $('#eEmail').value=curCustomer.email||''; $('#eStatus').value=normStatus(curCustomer.status); show('editcust');
 };
 $('#eSave').onclick = async ()=>{
   const name=$('#eName').value.trim(); if(!name){ toast('Business name required'); return; }
   const upd={ name, address:$('#eAddr').value.trim(), contact_person:$('#eContact').value.trim(),
-    phone:$('#ePhone').value.trim(), email:$('#eEmail').value.trim() };
+    phone:$('#ePhone').value.trim(), email:$('#eEmail').value.trim(), status:normStatus($('#eStatus').value) };
   // update local cache
   const rec = await DB.get('customers', curCustomer.customer_id) || {localId:curCustomer.customer_id, ...curCustomer};
   Object.assign(rec, upd, {updated_at:nowISO()}); await DB.put('customers', rec);
   curCustomer=Object.assign({}, curCustomer, upd);
-  if(!curCustomer.pending){ // only sync edits for synced customers
+  if(!curCustomer.pending){
     await enqueue({type:'updateCustomer', op_id:uuid(), customer_id:curCustomer.customer_id, ...upd});
+  } else if(rec.op_id){
+    // Unsynced customer: patch the queued addCustomer op so the edit isn't lost on sync.
+    const qop = await DB.get('queue', rec.op_id);
+    if(qop){ Object.assign(qop, upd); await DB.put('queue', qop); }
   }
   toast('Contact info updated'); back(); openCustomer(curCustomer.customer_id);
 };
@@ -807,23 +887,26 @@ async function loadReport(){
   busy(true);
   try{
     const r=await api('getReport',{name:SESSION.name,pin:SESSION.pin});
-    reportRows=r.rows||[];
+    reportRows=(r.rows||[]).map(x=>({...x, status:normStatus(x.status)}));
     const sel=$('#fRep'); sel.innerHTML='<option value="">All reps</option>'+(r.users||[]).map(u=>`<option>${esc(u)}</option>`).join('');
     renderReport();
   }catch(e){ toast(e.message); }
   finally{ busy(false); }
 }
+$('#fStatus').innerHTML = '<option value="">All statuses</option>' + STATUSES.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
 $('#adminRefresh').onclick=loadReport;
-['fRep','fType','fFrom','fTo','fSearch'].forEach(id=> $('#'+id).oninput=renderReport);
+['fRep','fType','fStatus','fFrom','fTo','fSearch'].forEach(id=> $('#'+id).oninput=renderReport);
 $('#adminTable').querySelectorAll('th').forEach(th=> th.onclick=()=>{
   const k=th.dataset.k; if(sortKey===k) sortDir*=-1; else {sortKey=k; sortDir=1;} renderReport();
 });
 function filteredRows(){
-  const rep=$('#fRep').value, type=$('#fType').value, from=$('#fFrom').value, to=$('#fTo').value,
+  const rep=$('#fRep').value, type=$('#fType').value, status=$('#fStatus').value,
+        from=$('#fFrom').value, to=$('#fTo').value,
         q=$('#fSearch').value.trim().toLowerCase();
   return reportRows.filter(r=>{
     if(rep && r.rep!==rep) return false;
     if(type && r.method!==type) return false;
+    if(status && r.status!==status) return false;
     const d=(r.timestamp||'').slice(0,10);
     if(from && d<from) return false;
     if(to && d>to) return false;
@@ -836,14 +919,15 @@ function renderReport(){
   $('#adminCount').textContent=rows.length;
   $('#adminBody').innerHTML = rows.length ? rows.map(r=>`<tr>
     <td class="ts">${fmt(r.timestamp)}</td><td>${esc(r.rep)}</td><td>${esc(r.customer)}</td>
+    <td>${stBadge(r.status)}</td>
     <td>${esc(r.address)}</td><td>${esc(r.contact)}</td><td class="mono">${esc(r.phone)}</td>
     <td>${esc(r.email)}</td><td>${esc(r.method)}</td><td class="notes">${esc(r.notes)}</td></tr>`).join('')
-    : `<tr><td colspan="9" class="empty">No entries match these filters.</td></tr>`;
+    : `<tr><td colspan="10" class="empty">No entries match these filters.</td></tr>`;
 }
 $('#adminExport').onclick=()=>{
   const rows=filteredRows();
-  const cols=['timestamp','rep','customer','address','contact','phone','email','method','notes'];
-  const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>csvCell(r[c])).join(','))).join('\r\n');
+  const cols=['timestamp','rep','customer','status','address','contact','phone','email','method','notes'];
+  const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>csvCell(c==='status'?stLabel(r[c]):r[c])).join(','))).join('\r\n');
   const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='sales-activity-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
 };
