@@ -101,6 +101,15 @@
   .cust-item small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
   .cust-item .arr{margin-left:auto;color:var(--muted)}
 
+  /* Status tabs + tags (colorblind-safe: word + glyph, color secondary) */
+  .tabs{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tabs button{flex:none;min-height:40px;padding:0 14px;border:1.5px solid var(--line);border-radius:999px;
+    background:var(--surface);font-weight:800;font-size:13.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+  .tabs button[aria-selected="true"]{color:#fff;background:var(--ink);border-color:var(--ink)}
+  .stag{font-size:11px;font-weight:800;letter-spacing:.03em;padding:3px 8px;border-radius:6px;border:1.5px solid currentColor;display:inline-flex;align-items:center;gap:4px;flex:none}
+  .stag.Target{color:var(--amber)} .stag.Prospect{color:var(--blue)} .stag.Active{color:var(--green)}
+  .statusseg button{min-height:46px;font-size:14px}
+
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 18px;border-radius:999px;font-weight:700;font-size:14px;opacity:0;transition:.25s;z-index:30;max-width:90vw;text-align:center}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .err{color:var(--danger);font-weight:700;font-size:13px;margin-top:6px}
@@ -218,6 +227,8 @@
             <label class="fld" style="margin:0"><span class="lbl">Phone</span><input id="nPhone" inputmode="tel" autocomplete="off"></label>
             <label class="fld" style="margin:0"><span class="lbl">Email</span><input id="nEmail" inputmode="email" autocomplete="off"></label>
           </div>
+          <span class="lbl" style="font-size:12px;font-weight:700">Stage</span>
+          <div class="seg statusseg" id="nStatusSeg" style="margin-top:6px"></div>
         </div>
       </div>
 
@@ -249,6 +260,7 @@
       <div class="eyebrow">Accounts</div>
       <h1>My customers</h1>
       <input id="custSearch" placeholder="Search by name or contact…" style="margin-bottom:14px" autocomplete="off">
+      <div class="tabs" id="statusTabs" role="tablist"></div>
       <button class="btn ghost sm" id="repExport" style="margin-bottom:14px">Export my customers & notes (Excel)</button>
       <div id="custList"></div>
     </section>
@@ -259,7 +271,7 @@
       <h1 id="cdName">—</h1>
       <div class="card stack" id="cdInfo"></div>
       <button class="btn primary" id="cdFollowUp">Log a follow-up</button>
-      <button class="btn ghost" id="cdEdit" style="margin-top:10px">Edit contact info</button>
+      <button class="btn ghost" id="cdEdit" style="margin-top:10px">Edit account &amp; stage</button>
       <h2 style="margin-top:22px">History</h2>
       <div class="ledger" id="cdHistory"></div>
     </section>
@@ -267,13 +279,15 @@
     <!-- EDIT CUSTOMER -->
     <section id="screen-editcust" class="pad hide">
       <div class="eyebrow">Account</div>
-      <h1>Edit contact info</h1>
+      <h1>Edit account &amp; stage</h1>
       <div class="card stack">
         <label class="fld"><span class="lbl">Business name *</span><input id="eName" autocomplete="off"></label>
         <label class="fld"><span class="lbl">Address</span><input id="eAddr" autocomplete="off"></label>
         <label class="fld"><span class="lbl">Contact person</span><input id="eContact" autocomplete="off"></label>
         <label class="fld"><span class="lbl">Phone</span><input id="ePhone" inputmode="tel" autocomplete="off"></label>
         <label class="fld"><span class="lbl">Email</span><input id="eEmail" inputmode="email" autocomplete="off"></label>
+        <div><span class="lbl" style="font-size:12px;font-weight:700">Stage</span>
+        <div class="seg statusseg" id="eStatusSeg" style="margin-top:6px"></div></div>
         <button class="btn primary" id="eSave">Save changes</button>
       </div>
     </section>
@@ -304,6 +318,7 @@
             <th data-k="timestamp">Date / time</th>
             <th data-k="rep">Rep</th>
             <th data-k="customer">Customer</th>
+            <th data-k="status">Stage</th>
             <th data-k="address">Address</th>
             <th data-k="contact">Contact</th>
             <th data-k="phone">Phone</th>
@@ -338,6 +353,20 @@
 const $ = s => document.querySelector(s);
 const uuid = () => 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const nowISO = () => new Date().toISOString();
+
+/* Pipeline stages. Glyphs differ per stage so color is never the only signal. */
+const STATUSES = ['Target','Prospect','Active'];
+const SGLYPH = {Target:'◎', Prospect:'◐', Active:'●'};
+const normStatus = v => STATUSES.includes(v) ? v : 'Active'; // legacy blanks = Active
+const stag = s => { s=normStatus(s); return `<span class="stag ${s}">${SGLYPH[s]} ${s}</span>`; };
+/* Build a 3-way status segmented control inside container el; onPick(status) on tap. */
+function buildStatusSeg(el, current, onPick){
+  el.innerHTML = STATUSES.map(s=>`<button type="button" data-s="${s}" aria-pressed="${s===current}">${SGLYPH[s]} ${s}</button>`).join('');
+  el.querySelectorAll('button').forEach(b=> b.onclick=()=>{
+    el.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+    onPick(b.dataset.s);
+  });
+}
 
 /* ---------- tiny IndexedDB wrapper ---------- */
 const DB = (() => {
@@ -403,7 +432,7 @@ async function demoSeed(){
     {name:'Demo Admin', pin:'0000', role:'admin'}
   ]});
   await DB.put('demo',{k:'customers',v:[
-    {customer_id:'C1001', rep:'Demo Rep', name:'Harvest Table Bistro', address:'120 Main St, Columbia SC', contact_person:'Renee Park', phone:'803-555-0142', email:'renee@harvesttable.com', created_at:nowISO(), updated_at:nowISO()}
+    {customer_id:'C1001', rep:'Demo Rep', name:'Harvest Table Bistro', status:'Active', address:'120 Main St, Columbia SC', contact_person:'Renee Park', phone:'803-555-0142', email:'renee@harvesttable.com', created_at:nowISO(), updated_at:nowISO()}
   ]});
   await DB.put('demo',{k:'entries',v:[
     {entry_id:'E5001', op_id:'seed1', timestamp:new Date(Date.now()-86400000).toISOString(), rep:'Demo Rep', customer_id:'C1001', customer_name:'Harvest Table Bistro', method:'In person', notes:'Intro visit. Interested in weekly leafy greens + tomatoes. Send Monday price sheet.'}
@@ -425,13 +454,13 @@ async function demoApi(action, d){
     const nameById=Object.fromEntries(cs.map(c=>[c.customer_id,c.name]));
     const es=(await DB.get('demo','entries')).v.filter(e=>e.rep===u.name);
     return {ok:true,
-      customers: cs.map(c=>({customer:c.name,address:c.address,contact:c.contact_person,phone:c.phone,email:c.email,created_at:c.created_at})),
+      customers: cs.map(c=>({customer:c.name,status:normStatus(c.status),address:c.address,contact:c.contact_person,phone:c.phone,email:c.email,created_at:c.created_at})),
       notes: es.map(e=>({timestamp:e.timestamp,customer:nameById[e.customer_id]||e.customer_name||'',method:e.method,notes:e.notes}))}; }
   if(action==='getReport'){ const u=auth(); if(u.role!=='admin') throw new Error('Admin only');
     const cs=(await DB.get('demo','customers')).v, es=(await DB.get('demo','entries')).v;
     const map=Object.fromEntries(cs.map(c=>[c.customer_id,c]));
     return {ok:true, users:users.map(x=>x.name),
-      rows: es.map(e=>{const c=map[e.customer_id]||{}; return {timestamp:e.timestamp,rep:e.rep,customer:e.customer_name||c.name||'',address:c.address||'',contact:c.contact_person||'',phone:c.phone||'',email:c.email||'',method:e.method,notes:e.notes};})}; }
+      rows: es.map(e=>{const c=map[e.customer_id]||{}; return {timestamp:e.timestamp,rep:e.rep,customer:e.customer_name||c.name||'',status:normStatus(c.status),address:c.address||'',contact:c.contact_person||'',phone:c.phone||'',email:c.email||'',method:e.method,notes:e.notes};})}; }
   if(action==='submit'){ const u=auth();
     const cs=(await DB.get('demo','customers')).v, es=(await DB.get('demo','entries')).v;
     const seenC=new Set(cs.map(c=>c.op_id)), seenE=new Set(es.map(e=>e.op_id));
@@ -440,11 +469,11 @@ async function demoApi(action, d){
       if(op.type==='addCustomer'){
         if(op.op_id && seenC.has(op.op_id)){ const ex=cs.find(c=>c.op_id===op.op_id); idmap[op.client_uuid]=ex.customer_id; results.push({op_id:op.op_id,status:'ok',customer_id:ex.customer_id}); continue; }
         const id='C'+(1000+cs.length+1)+Math.floor(Math.random()*90);
-        const rec={op_id:op.op_id,customer_id:id,rep:u.name,name:op.name,address:op.address||'',contact_person:op.contact_person||'',phone:op.phone||'',email:op.email||'',created_at:nowISO(),updated_at:nowISO()};
+        const rec={op_id:op.op_id,customer_id:id,rep:u.name,name:op.name,status:normStatus(op.status),address:op.address||'',contact_person:op.contact_person||'',phone:op.phone||'',email:op.email||'',created_at:nowISO(),updated_at:nowISO()};
         cs.push(rec); seenC.add(op.op_id); idmap[op.client_uuid]=id; results.push({op_id:op.op_id,status:'ok',customer_id:id});
       } else if(op.type==='updateCustomer'){
         const c=cs.find(x=>x.customer_id===op.customer_id && x.rep===u.name);
-        if(c){ Object.assign(c,{name:op.name,address:op.address,contact_person:op.contact_person,phone:op.phone,email:op.email,updated_at:nowISO()});}
+        if(c){ Object.assign(c,{name:op.name,status:normStatus(op.status),address:op.address,contact_person:op.contact_person,phone:op.phone,email:op.email,updated_at:nowISO()});}
         results.push({op_id:op.op_id,status:'ok'});
       } else if(op.type==='addEntry'){
         if(op.op_id && seenE.has(op.op_id)){ results.push({op_id:op.op_id,status:'ok'}); continue; }
@@ -635,12 +664,13 @@ $('#goCustomers').onclick = ()=>{ show('customers'); renderCustomerList(); };
 /* ============================================================
    New log entry
    ============================================================ */
-let logState = { mode:'existing', method:'', selectedCustomer:null };
+let logState = { mode:'existing', method:'', selectedCustomer:null, newStatus:'Prospect' };
 async function openNewLog(preCustomer){
-  logState = { mode: preCustomer?'existing':'existing', method:'', selectedCustomer:preCustomer };
+  logState = { mode: preCustomer?'existing':'existing', method:'', selectedCustomer:preCustomer, newStatus:'Prospect' };
   $('#logErr').classList.add('hide');
   $('#logNotes').value='';
   $('#nName').value=$('#nAddr').value=$('#nContact').value=$('#nPhone').value=$('#nEmail').value='';
+  buildStatusSeg($('#nStatusSeg'), 'Prospect', s=>logState.newStatus=s);
   setMode('existing');
   setMethod('');
   $('#logStamp').textContent = 'Will stamp · '+fmt(nowISO());
@@ -704,12 +734,12 @@ $('#saveLog').onclick = async ()=>{
     const name=$('#nName').value.trim();
     if(!name){ showErr('#logErr','Enter the business name for the new customer.'); return; }
     client_uuid=uuid(); customer_name=name;
-    customerOp={ type:'addCustomer', op_id:uuid(), client_uuid, name,
+    customerOp={ type:'addCustomer', op_id:uuid(), client_uuid, name, status:logState.newStatus,
       address:$('#nAddr').value.trim(), contact_person:$('#nContact').value.trim(),
       phone:$('#nPhone').value.trim(), email:$('#nEmail').value.trim() };
     // optimistic local cache so it appears immediately + offline
     await DB.put('customers', {localId:client_uuid, op_id:customerOp.op_id, pending:true,
-      customer_id:client_uuid, rep:SESSION.name, name, address:customerOp.address,
+      customer_id:client_uuid, rep:SESSION.name, name, status:logState.newStatus, address:customerOp.address,
       contact_person:customerOp.contact_person, phone:customerOp.phone, email:customerOp.email, created_at:ts, updated_at:ts});
   } else {
     if(!logState.selectedCustomer){ showErr('#logErr','Select a customer or switch to New customer.'); return; }
@@ -733,15 +763,24 @@ $('#saveLog').onclick = async ()=>{
 /* ============================================================
    Customers list + detail
    ============================================================ */
+let custFilter='';
 async function renderCustomerList(){
   const q=$('#custSearch').value.trim().toLowerCase();
   const cs=await getCachedCustomers();
+  // tabs with live counts
+  const counts={'':cs.length}; STATUSES.forEach(s=>counts[s]=cs.filter(c=>normStatus(c.status)===s).length);
+  $('#statusTabs').innerHTML = [['','All'],...STATUSES.map(s=>[s,`${SGLYPH[s]} ${s}`])]
+    .map(([v,l])=>`<button role="tab" data-v="${v}" aria-selected="${custFilter===v}">${l} (${counts[v]})</button>`).join('');
+  $('#statusTabs').querySelectorAll('button').forEach(b=> b.onclick=()=>{ custFilter=b.dataset.v; renderCustomerList(); });
+
   const list=$('#custList');
-  const f = cs.filter(c=>!q || (c.name||'').toLowerCase().includes(q) || (c.contact_person||'').toLowerCase().includes(q));
+  const f = cs.filter(c=>
+    (!custFilter || normStatus(c.status)===custFilter) &&
+    (!q || (c.name||'').toLowerCase().includes(q) || (c.contact_person||'').toLowerCase().includes(q)));
   if(!f.length){ list.innerHTML = `<div class="empty"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><div>${cs.length?'No matches.':'No customers yet. Add one from a new log entry.'}</div></div>`; return; }
   list.innerHTML = f.map(c=>`<button class="cust-item" data-id="${esc(c.customer_id)}">
       <div><b>${esc(c.name)}</b><small>${esc([c.contact_person,c.phone].filter(Boolean).join(' · ')||c.address||'')}</small></div>
-      ${c.pending?'<span class="qpending" style="margin-left:auto">unsynced</span>':'<span class="arr">›</span>'}
+      <span style="margin-left:auto;display:flex;align-items:center;gap:8px">${stag(c.status)}${c.pending?'<span class="qpending">unsynced</span>':'<span class="arr">›</span>'}</span>
     </button>`).join('');
   list.querySelectorAll('.cust-item').forEach(b=> b.onclick=()=>openCustomer(b.dataset.id));
 }
@@ -769,14 +808,14 @@ $('#repExport').onclick = async ()=>{
       await loadSheetJS();
       const wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(customers,
-        {header:['customer','address','contact','phone','email','created_at']}), 'Customers');
+        {header:['customer','status','address','contact','phone','email','created_at']}), 'Customers');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(notes,
         {header:['timestamp','customer','method','notes']}), 'Notes');
       XLSX.writeFile(wb, 'my-customers-'+stamp+'.xlsx');
       toast('Excel file exported');
     }catch(_){
       // Offline / lib blocked: fall back to CSV, which Excel opens directly.
-      const cCols=['customer','address','contact','phone','email','created_at'];
+      const cCols=['customer','status','address','contact','phone','email','created_at'];
       const nCols=['timestamp','customer','method','notes'];
       const csv=['MY CUSTOMERS',cCols.join(',')]
         .concat(customers.map(c=>cCols.map(k=>csvCell(c[k])).join(',')))
@@ -794,7 +833,7 @@ let curCustomer=null;
 async function openCustomer(id){
   const cs=await getCachedCustomers();
   curCustomer = cs.find(c=>c.customer_id===id); if(!curCustomer) return;
-  $('#cdName').textContent=curCustomer.name;
+  $('#cdName').innerHTML=esc(curCustomer.name)+' '+stag(curCustomer.status);
   $('#cdInfo').innerHTML = [
     ['Contact', curCustomer.contact_person],['Phone', curCustomer.phone],
     ['Email', curCustomer.email],['Address', curCustomer.address]
@@ -831,14 +870,18 @@ function renderEntryRow(e){
   </div>`;
 }
 $('#cdFollowUp').onclick = ()=> openNewLog(curCustomer);
+let editStatus='Active';
 $('#cdEdit').onclick = ()=>{
   $('#eName').value=curCustomer.name||''; $('#eAddr').value=curCustomer.address||'';
   $('#eContact').value=curCustomer.contact_person||''; $('#ePhone').value=curCustomer.phone||'';
-  $('#eEmail').value=curCustomer.email||''; show('editcust');
+  $('#eEmail').value=curCustomer.email||'';
+  editStatus=normStatus(curCustomer.status);
+  buildStatusSeg($('#eStatusSeg'), editStatus, s=>editStatus=s);
+  show('editcust');
 };
 $('#eSave').onclick = async ()=>{
   const name=$('#eName').value.trim(); if(!name){ toast('Business name required'); return; }
-  const upd={ name, address:$('#eAddr').value.trim(), contact_person:$('#eContact').value.trim(),
+  const upd={ name, status:editStatus, address:$('#eAddr').value.trim(), contact_person:$('#eContact').value.trim(),
     phone:$('#ePhone').value.trim(), email:$('#eEmail').value.trim() };
   // update local cache
   const rec = await DB.get('customers', curCustomer.customer_id) || {localId:curCustomer.customer_id, ...curCustomer};
@@ -887,13 +930,14 @@ function renderReport(){
   $('#adminCount').textContent=rows.length;
   $('#adminBody').innerHTML = rows.length ? rows.map(r=>`<tr>
     <td class="ts">${fmt(r.timestamp)}</td><td>${esc(r.rep)}</td><td>${esc(r.customer)}</td>
+    <td>${stag(r.status)}</td>
     <td>${esc(r.address)}</td><td>${esc(r.contact)}</td><td class="mono">${esc(r.phone)}</td>
     <td>${esc(r.email)}</td><td>${esc(r.method)}</td><td class="notes">${esc(r.notes)}</td></tr>`).join('')
-    : `<tr><td colspan="9" class="empty">No entries match these filters.</td></tr>`;
+    : `<tr><td colspan="10" class="empty">No entries match these filters.</td></tr>`;
 }
 $('#adminExport').onclick=()=>{
   const rows=filteredRows();
-  const cols=['timestamp','rep','customer','address','contact','phone','email','method','notes'];
+  const cols=['timestamp','rep','customer','status','address','contact','phone','email','method','notes'];
   const csv=[cols.join(',')].concat(rows.map(r=>cols.map(c=>csvCell(r[c])).join(','))).join('\r\n');
   const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download='sales-activity-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
